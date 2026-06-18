@@ -1,0 +1,43 @@
+{
+  "name": "vouch-builder",
+  "version": "1.0.0",
+  "description": "Night-shift handover service for hotel front-desk operations",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "start:ts": "tsx src/index.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dimasmuly/vouch-builder.git"
+  },
+  "keywords": [
+    "hotel",
+    "handover",
+    "ai",
+    "night-shift"
+  ],
+  "author": "Dimas Muly",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/dimasmuly/vouch-builder/issues"
+  },
+  "homepage": "https://github.com/dimasmuly/vouch-builder#readme",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@hono/node-server": "^2.0.5",
+    "@types/node": "^25.9.3",
+    "hono": "^4.12.26",
+    "pino": "^10.3.1",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/pino": "^7.0.4",
+    "pino-pretty": "^13.1.3"
+  }
+}
