@@ -16,6 +16,21 @@ function getClient(): GoogleGenerativeAI | null {
   return genAI;
 }
 
+/**
+ * Detect if an error is a Gemini quota / rate-limit error (HTTP 429).
+ * When quota is exceeded, we fall back gracefully rather than crashing.
+ */
+function isQuotaError(err: unknown): boolean {
+  if (!err) return false;
+  const msg = String(err);
+  return (
+    msg.includes("429") ||
+    msg.includes("Too Many Requests") ||
+    msg.includes("Quota exceeded") ||
+    msg.includes("RESOURCE_EXHAUSTED")
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Schema for extracting events from free-text night logs
 // ---------------------------------------------------------------------------
@@ -153,23 +168,50 @@ ${text}`;
 
   logger.info({ shiftDate }, "Calling Gemini to extract events from free-text");
 
-  const result = await model.generateContent(prompt);
-  const responseText = result.response.text();
-
-  let parsed: { events: any[] };
   try {
-    parsed = JSON.parse(responseText);
-  } catch (e) {
-    logger.error({ shiftDate, responseText }, "Failed to parse Gemini JSON response");
-    throw new Error(`Gemini returned invalid JSON for shift ${shiftDate}`);
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
+
+    let parsed: { events: any[] };
+    try {
+      parsed = JSON.parse(responseText);
+    } catch (e) {
+      logger.error({ shiftDate, responseText }, "Failed to parse Gemini JSON response");
+      throw new Error(`Gemini returned invalid JSON for shift ${shiftDate}`);
+    }
+
+    logger.info(
+      { shiftDate, extractedCount: parsed.events.length },
+      "Gemini extraction complete"
+    );
+
+    return parsed.events;
+  } catch (err) {
+    if (isQuotaError(err)) {
+      logger.warn(
+        { shiftDate },
+        "Gemini quota exceeded — returning raw log text as unextracted note. Upgrade API plan to enable AI extraction."
+      );
+      return [
+        {
+          type: "note",
+          room: null,
+          guest: null,
+          description: text.slice(0, 2000),
+          status: "unresolved" as const,
+          approximateTime: null,
+          flags: [
+            {
+              kind: "incomplete",
+              description:
+                "AI extraction skipped — Gemini quota exceeded. Raw free-text log below needs manual review. Upgrade to a paid Gemini API plan to re-enable.",
+            },
+          ],
+        },
+      ];
+    }
+    throw err; // Non-quota errors still propagate
   }
-
-  logger.info(
-    { shiftDate, extractedCount: parsed.events.length },
-    "Gemini extraction complete"
-  );
-
-  return parsed.events;
 }
 
 // ---------------------------------------------------------------------------
@@ -250,6 +292,10 @@ export async function verifyGrounding(
     );
     return parsed;
   } catch (e) {
+    if (isQuotaError(e)) {
+      logger.warn("Gemini quota exceeded — skipping grounding verification");
+      return { verified: false, ungroundedClaims: [{ claim: "grounding_skipped", reason: "Gemini quota exceeded — upgrade API plan to enable grounding verification" }] };
+    }
     logger.error({ err: e }, "Grounding verification failed");
     return { verified: false, ungroundedClaims: [{ claim: "verification_error", reason: String(e) }] };
   }
